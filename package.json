@@ -11,9 +11,9 @@
     "dataset",
     "datatable"
   ],
-  "main": "./dist/vue-dataset.umd.js",
-  "module": "./dist/vue-dataset.es.js",
-  "unpkg": "dist/vue-dataset.umd.js",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "unpkg": "src/index.js",
   "sideEffects": [
     "./**/*.scss",
     "./vuepress-plugin-vue-example/**/*.vue",
