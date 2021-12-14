@@ -121,8 +121,10 @@ function fieldFilter(items, filterFields) {
 function findAny(dsSearchIn, dsSearchAs, rowData, str) {
   // Convert the search string to lower case
   str = String(str).toLowerCase()
+  
+  const rowDataEntries = Object.entries({ ...flattenObject(rowData), ...rowData })
 
-  for (const [key, value] of Object.entries([...flattenObject(rowData), ...rowData])) {
+  for (const [key, value] of rowDataEntries) {
     if (dsSearchIn.length === 0 || dsSearchIn.indexOf(key) !== -1) {
       const dsSearchAsFn = dsSearchAs[key]
       // Found key in dsSearchAs so we pass the value and the search string to a search function
