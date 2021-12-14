@@ -1,11 +1,27 @@
 <template>
-  <slot :ds="{ dsShowEntries, dsResultsNumber, dsPage, dsPagecount, dsFrom, dsTo, dsData, dsRows, dsPages, search, showEntries, setActive }"></slot>
+  <slot
+    :ds="{
+      dsShowEntries,
+      dsResultsNumber,
+      dsPage,
+      dsPagecount,
+      dsFrom,
+      dsTo,
+      dsData,
+      dsRows,
+      dsPages,
+      search,
+      showEntries,
+      setActive
+    }"
+  ></slot>
 </template>
 
 <script>
 import i18n from './i18n/en.js'
-import { isEmptyObject, createPagingRange, fieldSorter, fieldFilter, findAny } from './helpers'
+import { isEmptyObject, createPagingRange, fieldSorter, filterRow, findAny } from './helpers'
 import { ref, computed, provide, watch, nextTick } from 'vue'
+import { flattenObject } from 'flatten-anything'
 
 export default {
   props: {
@@ -34,6 +50,16 @@ export default {
       default: () => ({})
     }
   },
+  /**
+   * @param {{
+   *   dsData: Record<string, any>[];
+   *   dsFilterFields: { [colId in string]: (cellValue: any, rowData: Record<string, any>) => boolean | any };
+   *   dsSortby: string[];
+   *   dsSearchIn: string[];
+   *   dsSearchAs: { [id in string]: (cellValue: any, searchString: string, rowData: Record<string, any>) => boolean };
+   *   dsSortAs: { [id in string]: (cellValue: any, rowData: Record<string, any>) => any };
+   * }} props
+   */
   setup(props) {
     const dsPage = ref(1)
     const dsSearch = ref('')
@@ -109,18 +135,17 @@ export default {
           // Skip processing and just get the indexes
           result = props.dsData.map((val, i) => i)
         } else {
-          // Index it
-          result = props.dsData.map((val, i) => ({ index: i, value: val }))
+          // Index it and prepare flattened data
+          result = props.dsData.map((val, i) => ({ rowIndex: i, rowData: val, rowDataFlat: flattenObject(val) }))
 
-          // Filter it by field
-          if (!isEmptyObject(props.dsFilterFields)) {
-            result = fieldFilter(result, props.dsFilterFields)
-          }
-
-          // Search it
-          if (dsSearch.value) {
-            result = result.filter((entry) => findAny(props.dsSearchIn, props.dsSearchAs, entry.value, dsSearch.value))
-          }
+          result = result.filter((row) => {
+            return (
+              // Filter it by field
+              filterRow(row, props.dsFilterFields) &&
+              // Search it
+              findAny(props.dsSearchIn, props.dsSearchAs, row, dsSearch.value)
+            )
+          })
 
           // Sort it
           if (props.dsSortby.length) {
@@ -128,7 +153,7 @@ export default {
           }
 
           // We need only the indexes
-          result = result.map((entry) => entry.index)
+          result = result.map((row) => row.rowIndex)
         }
         indexes.value = result
       },

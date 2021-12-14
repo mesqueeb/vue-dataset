@@ -1,4 +1,4 @@
-import { flattenObject } from 'flatten-anything'
+import { getProp } from 'path-to-prop'
 
 const MORE_PAGES = '...'
 
@@ -62,25 +62,40 @@ function createPagingRange(nrOfPages, currentPage) {
   return rangeWithDots
 }
 
-function fieldSorter(fields, dsSortAs = {}) {
+/**
+ * @param {string[]} dsSortby
+ * @param {{ [id in string]: (cellValue: any, rowData: Record<string, any>) => any }} dsSortAs
+ * @returns {(a: any, b: any) => number} must return a function that can be plugged into `.sort()`
+ */
+function fieldSorter(dsSortby, dsSortAs = {}) {
   const dir = []
   let i
-  const length = fields.length
-  fields = fields.map(function (o, i) {
-    if (o[0] === '-') {
+  const length = dsSortby.length
+  dsSortby = dsSortby.map(function (colId, i) {
+    if (colId[0] === '-') {
       dir[i] = -1
-      o = o.substring(1)
+      colId = colId.substring(1)
     } else {
       dir[i] = 1
     }
-    return o
+    return colId
   })
 
-  return function (a, b) {
+  /**
+   * @param {{ rowIndex: number, rowData: Record<string, any>, rowDataFlat: Record<string, any> }} rowA
+   * @param {{ rowIndex: number, rowData: Record<string, any>, rowDataFlat: Record<string, any> }} rowB
+   */
+  return function (rowA, rowB) {
+    const rowDataA = rowA.rowData
+    const rowDataB = rowB.rowData
+
     for (i = 0; i < length; i++) {
-      const o = fields[i]
-      const aVal = dsSortAs[o] ? dsSortAs[o](a.value[o], a.value) : a.value[o]
-      const bVal = dsSortAs[o] ? dsSortAs[o](b.value[o], b.value) : b.value[o]
+      const colId = dsSortby[i]
+      const valueA = getProp(rowDataA, colId)
+      const valueB = getProp(rowDataB, colId)
+      const sortAsFn = dsSortAs[colId]
+      const aVal = sortAsFn ? sortAsFn(valueA, rowDataA) : valueA
+      const bVal = sortAsFn ? sortAsFn(valueB, rowDataB) : valueB
       if (aVal > bVal) {
         return dir[i]
       }
@@ -92,58 +107,65 @@ function fieldSorter(fields, dsSortAs = {}) {
   }
 }
 
-function fieldFilter(items, filterFields) {
-  // Filter it by field
-  for (const filterKey in filterFields) {
-    // console.log(filterKey + ' -> ' + filterFields[filterKey]);
-    items = items.filter(function (item) {
-      const itemValue = item.value
-      for (const itemKey in itemValue) {
-        if (itemKey === filterKey) {
-          if (typeof filterFields[filterKey] === 'function') {
-            return filterFields[filterKey](itemValue[itemKey])
-          }
-          if (filterFields[filterKey] === '') {
-            return true
-          }
-          if (itemValue[itemKey] === filterFields[filterKey]) {
-            return true
-          }
-        }
-      }
-      return false
-    })
-  }
-  return items
+/**
+ * @param {{ rowIndex: number, rowData: Record<string, any>, rowDataFlat: Record<string, any> }} row
+ * @param {{ [colId in string]: (cellValue: any, rowData: Record<string, any>) => boolean | any }} dsFilterFields
+ * @returns {boolean}
+ */
+export function filterRow(row, dsFilterFields) {
+  const { rowData } = row
+
+  const filterResults = Object.entries(dsFilterFields).map(([filterKey, filterValueOrFn]) => {
+    // get the (nested) value
+    const cellValue = getProp(rowData, filterKey)
+
+    if (typeof filterValueOrFn === 'function') {
+      return filterValueOrFn(cellValue, rowData)
+    }
+    return cellValue === filterValueOrFn
+  })
+
+  // the filters currently are chained with `AND`, so check with `.every`
+  return filterResults.every((r) => r === true)
 }
 
-// Search method that also takes into account transformations needed
-function findAny(dsSearchIn, dsSearchAs, rowData, str) {
+/**
+ * Search method that also takes into account transformations needed
+ * @param {string[]} dsSearchIn
+ * @param {{ [id in string]: (cellValue: any, searchString: string, rowData: Record<string, any>) => boolean }} dsSearchAs
+ * @param {{ rowIndex: number, rowData: Record<string, any>, rowDataFlat: Record<string, any> }} row
+ * @param {string} str
+ * @returns {boolean}
+ */
+export function findAny(dsSearchIn, dsSearchAs, row, str) {
+  const { rowData, rowDataFlat } = row
   // Convert the search string to lower case
   str = String(str).toLowerCase()
-  
-  const rowDataEntries = Object.entries({ ...flattenObject(rowData), ...rowData })
+
+  const rowDataEntries = Object.entries({ ...rowDataFlat, ...rowData })
 
   for (const [key, value] of rowDataEntries) {
-    if (dsSearchIn.length === 0 || dsSearchIn.indexOf(key) !== -1) {
-      const dsSearchAsFn = dsSearchAs[key]
-      // Found key in dsSearchAs so we pass the value and the search string to a search function
+    // check which keys to skip
+    const notASearchableKey = dsSearchIn.length && !dsSearchIn.includes(key)
+    if (notASearchableKey) continue
+
+    const searchAsFn = dsSearchAs[key]
+    // Check if `searchAsFn` is a function (passed from the template)
+    if (typeof searchAsFn === 'function') {
+      // We have a `searchAsFn` so we pass the value and the search string to a search function
       // that returns true/false and we return that if true.
-      /* Check if dsSearchAs is a function (passed from the template) */
-      if (typeof dsSearchAsFn === 'function') {
-        const res = dsSearchAsFn(value, str, rowData)
-        if (res === true) {
-          return res
-        }
-      }
-      const valueStr = String(value).toLowerCase()
-      // If it doesn't return from above we perform a simple search
-      if (valueStr.indexOf(str) >= 0) {
+      const res = searchAsFn(value, str, rowData)
+      if (res === true) {
         return true
       }
+    }
+    const valueAsStr = String(value).toLowerCase()
+    // If it doesn't return from above we perform a simple search
+    if (valueAsStr.indexOf(str) >= 0) {
+      return true
     }
   }
   return false
 }
 
-export { MORE_PAGES, debounce, isEmptyObject, createPagingRange, fieldSorter, fieldFilter, findAny }
+export { MORE_PAGES, debounce, isEmptyObject, createPagingRange, fieldSorter }
