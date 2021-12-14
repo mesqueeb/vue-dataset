@@ -1,4 +1,4 @@
-import { flatten } from 'flatten-anything'
+import { flattenObject } from 'flatten-anything'
 
 const MORE_PAGES = '...'
 
@@ -122,7 +122,7 @@ function findAny(dsSearchIn, dsSearchAs, rowData, str) {
   // Convert the search string to lower case
   str = String(str).toLowerCase()
 
-  for (const [key, value] of Object.entries([...flatten(rowData), ...rowData])) {
+  for (const [key, value] of Object.entries([...flattenObject(rowData), ...rowData])) {
     if (dsSearchIn.length === 0 || dsSearchIn.indexOf(key) !== -1) {
       const dsSearchAsFn = dsSearchAs[key]
       // Found key in dsSearchAs so we pass the value and the search string to a search function
