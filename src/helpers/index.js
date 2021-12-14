@@ -1,3 +1,5 @@
+import { flatten } from 'flatten-anything'
+
 const MORE_PAGES = '...'
 
 function debounce(func, wait, immediate) {
@@ -119,24 +121,22 @@ function fieldFilter(items, filterFields) {
 function findAny(dsSearchIn, dsSearchAs, rowData, str) {
   // Convert the search string to lower case
   str = String(str).toLowerCase()
-  for (const key in rowData) {
+
+  for (const [key, value] of Object.entries([...flatten(rowData), ...rowData])) {
     if (dsSearchIn.length === 0 || dsSearchIn.indexOf(key) !== -1) {
-      const value = String(rowData[key]).toLowerCase()
-      for (const field in dsSearchAs) {
-        if (field === key) {
-          // Found key in dsSearchAs so we pass the value and the search string to a search function
-          // that returns true/false and we return that if true.
-          /* Check if dsSearchAs is a function (passed from the template) */
-          if (typeof dsSearchAs[field] === 'function') {
-            const res = dsSearchAs[field](value, str, rowData)
-            if (res === true) {
-              return res
-            }
-          }
+      const dsSearchAsFn = dsSearchAs[key]
+      // Found key in dsSearchAs so we pass the value and the search string to a search function
+      // that returns true/false and we return that if true.
+      /* Check if dsSearchAs is a function (passed from the template) */
+      if (typeof dsSearchAsFn === 'function') {
+        const res = dsSearchAsFn(value, str, rowData)
+        if (res === true) {
+          return res
         }
       }
+      const valueStr = String(value).toLowerCase()
       // If it doesn't return from above we perform a simple search
-      if (value.indexOf(str) >= 0) {
+      if (valueStr.indexOf(str) >= 0) {
         return true
       }
     }

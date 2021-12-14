@@ -36,6 +36,7 @@
     "docs:build": "vuepress build docs"
   },
   "dependencies": {
+    "flatten-anything": "^2.0.4",
     "vue": "^3.2.20"
   },
   "devDependencies": {
