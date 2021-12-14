@@ -115,9 +115,9 @@ function fieldSorter(dsSortby, dsSortAs = {}) {
 export function filterRow(row, dsFilterFields) {
   const { rowData } = row
 
-  const filterResults = Object.entries(dsFilterFields).map(([filterKey, filterValueOrFn]) => {
+  const filterResults = Object.entries(dsFilterFields).map(([colId, filterValueOrFn]) => {
     // get the (nested) value
-    const cellValue = getProp(rowData, filterKey)
+    const cellValue = getProp(rowData, colId)
 
     if (typeof filterValueOrFn === 'function') {
       return filterValueOrFn(cellValue, rowData)
@@ -134,37 +134,40 @@ export function filterRow(row, dsFilterFields) {
  * @param {string[]} dsSearchIn
  * @param {{ [id in string]: (cellValue: any, searchString: string, rowData: Record<string, any>) => boolean }} dsSearchAs
  * @param {{ rowIndex: number, rowData: Record<string, any>, rowDataFlat: Record<string, any> }} row
- * @param {string} str
+ * @param {string} str the search string
  * @returns {boolean}
  */
 export function findAny(dsSearchIn, dsSearchAs, row, str) {
   const { rowData, rowDataFlat } = row
-  // Convert the search string to lower case
+
+  // first check the dsSearchAs functions:
+  for (const [colId, searchAsFn] of Object.entries(dsSearchAs)) {
+    const notASearchableColId = dsSearchIn.length && !dsSearchIn.includes(colId)
+    if (notASearchableColId) continue
+
+    // get the (nested) value
+    const cellValue = getProp(rowData, colId)
+
+    if (searchAsFn(cellValue, str, rowData) === true) {
+      return true
+    }
+  }
+  // Search didn't hit yet, so let's finally check the entire flat object:
+
   str = String(str).toLowerCase()
 
-  const rowDataEntries = Object.entries({ ...rowDataFlat, ...rowData })
-
-  for (const [key, value] of rowDataEntries) {
+  for (const [key, value] of Object.entries(rowDataFlat)) {
     // check which keys to skip
     const notASearchableKey = dsSearchIn.length && !dsSearchIn.includes(key)
     if (notASearchableKey) continue
 
-    const searchAsFn = dsSearchAs[key]
-    // Check if `searchAsFn` is a function (passed from the template)
-    if (typeof searchAsFn === 'function') {
-      // We have a `searchAsFn` so we pass the value and the search string to a search function
-      // that returns true/false and we return that if true.
-      const res = searchAsFn(value, str, rowData)
-      if (res === true) {
-        return true
-      }
-    }
     const valueAsStr = String(value).toLowerCase()
     // If it doesn't return from above we perform a simple search
     if (valueAsStr.indexOf(str) >= 0) {
       return true
     }
   }
+  // this row is not a hit
   return false
 }
 
